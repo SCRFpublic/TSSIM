@@ -1,0 +1,37 @@
+                  Parameters for SGSIM
+                  ********************
+                                        
+START OF PARAMETERS:
+hard_data_erosion.txt                            -file with data
+1  2  3  4  0  0              -  columns for X,Y,Z,vr,wt,sec.var.
+-1.0       1.0e21             -  trimming limits
+1                             -transform the data (0=no, 1=yes)
+sgsim.trn                     -  file for output trans table
+0                             -  consider ref. dist (0=no, 1=yes)
+hist.txt                  -  file with ref. dist distribution
+1  0                          -  columns for vr and wt
+0    1.0                   -  zmin,zmax(tail extrapolation)
+1       1.0                   -  lower tail option, parameter
+1      2.0                   -  upper tail option, parameter
+1                             -debugging level: 0,1,2,3
+sgsim.dbg                     -file for debugging output
+sgs_erosion.txt                     -file for simulation output
+1                             -number of realizations to generate
+300    1.0    1.0              -nx,xmn,xsiz
+250    1.0    1.0              -ny,ymn,ysiz
+1     0.5    1.0              -nz,zmn,zsiz
+5516                         -random number seed
+2     12                       -min and max original data for sim
+10                            -number of simulated nodes to use
+1                             -assign data to nodes (0=no, 1=yes)
+1     3                       -multiple grid search (0=no, 1=yes),num
+0                             -maximum data per octant (0=not used)
+60.0  60.0  60.0              -maximum search radii (hmax,hmin,vert)
+0.0   0.0   0.0              -angles for search ellipsoid
+51    51    11                -size of covariance lookup table
+1     0.0   0.0              -ktype: 0=SK,1=OK,2=LVM,3=EXDR,4=COLC
+local_varying_mean.txt             -  file with LVM, EXDR, or COLC variable
+1                             -  column for secondary variable
+1    0.0                      -nst, nugget effect
+1    1  0.0   0.0   0.0     -it,cc,ang1,ang2,ang3
+         100.0  100.0  1.0     -a_hmax, a_hmin, a_vert1

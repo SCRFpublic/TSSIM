@@ -1,0 +1,166 @@
+clear;clc;close all;
+verbose=0;
+condition_flag=0;
+topo_flag=1;
+g.x0=0;
+g.y0=0;
+g.z0=0;
+g.lx=600;
+g.ly=500;
+g.lz=1;
+g.dx=2;
+g.dy=2;
+g.dz=1;
+g=make_grid(g,0);
+path='Base_Surface_Model_2_600x500.txt';
+%---------------------------------------------------------------
+%% make base surface 
+[base_topo]=flipud(read_earthvision_grid(path,g));
+%---------------------------------------------------------------
+%% Define location of sediment source (cell-wise)
+center_point=[round(g.nx/2) 1];% Location of the sediment source
+%---------------------------------------------------------------
+%% Get all of the CDF data from the process model
+Input_path='/Users/alejandroleiva/Documents/ERE/process based process/tries/upslope_toolbox/';
+migration_cdf_data=[Input_path 'lateral_migration_posneg_cdf.txt'];
+progradation_cdf_data=[Input_path 'progradation_cdf.txt'];
+lobe_length_cdf_data=[Input_path 'lobe_length_cdf.txt'];
+lobe_width_cdf_data=[Input_path 'lobe_width_cdf.txt'];
+max_lobe_thick_cdf_data=[Input_path 'max_lobe_thick_cdf.txt'];
+chan_detrend_totalL_to_width_cdf_data=[Input_path 'channel_detrend_totL_over_W_cdf.txt'];
+
+
+
+migration_cdf=read_cdf_data(migration_cdf_data,verbose);
+progradation_cdf=read_cdf_data(progradation_cdf_data,verbose);
+lobe_length_cdf=read_cdf_data(lobe_length_cdf_data,verbose);
+width_cdf=read_cdf_data(lobe_width_cdf_data,verbose);
+max_lobe_thick_cdf=read_cdf_data(max_lobe_thick_cdf_data,verbose);
+chan_detrend_totalL_to_width_cdf=read_cdf_data(chan_detrend_totalL_to_width_cdf_data,verbose);
+
+
+
+[prob_map_mg, prob_map_pg]=make_mg_pg_maps(migration_cdf, progradation_cdf, center_point,g,verbose, 0); 
+lobe_prob_map_data=ones(g.ny,g.nx);
+[pfield_startpoint]=make_pfield_for_startpoint_tau(base_topo,prob_map_mg, prob_map_pg,lobe_prob_map_data,center_point,g,topo_flag, condition_flag);
+
+% disp('Initial I-coordinate') ;
+% i = input(' ')
+% disp('Initial J-coordinate') ;
+% j = input(' ')
+disp('Smoothen the surface? 1-yes 0-No') ;
+ind = input(' ');
+%E = flipud(base_topo);
+E = base_topo;
+if ind==1
+    E1=zeros(g.ly/g.dy,g.lx/g.dx,2);
+    E1(:,:,1)=E;
+    disp('How much?') ;
+    hw = input(' ');
+    E2=smooth3(E1,'box',[hw hw 1]);
+    E=E2(:,:,1);
+end
+
+imagesc(E)
+limits = [0 300 0 250];
+axis(limits);
+title('Initial Topography')
+
+R = dem_flow(E);
+T = flow_matrix(E, R);
+
+river_flag=0;
+pick_up=0;
+while river_flag==0
+    if pick_up==0
+    [ri, rj]=get_new_start_point_indep(pfield_startpoint,g);
+    end
+    pick_up=0;
+    [M, N] = size(E);
+    rhs = zeros(numel(E), 1);
+    idx = (rj-1)*M + ri;
+    rhs(idx) = 1;
+
+    figure;
+    I = T \ rhs;
+    I = reshape(I, M, N);
+    imshow(I,'InitialMag', 'fit')
+    axis(limits);
+    title('Influence Map')
+
+    figure;
+    vis_map(I, E, ri, rj);
+    axis(limits);
+
+
+    pos=find(I>0.01);
+    A=zeros(M,N);
+    A(pos)=1;
+    AA=logical(A);
+    D = dependence_map(E, T, A);
+    vis_map(D, E,AA);
+    title('Influence and Dependence Map')
+
+    figure;
+    vis_map(D, E,[]);
+    title('Dependence Map')
+    
+    river_flag = 3;
+    while (river_flag~=2 && river_flag~=1 && river_flag~=0)
+        disp('Do you accept this river/lobe_zone simulation? pick-up max: 2, yes: 1, No: 0');
+        river_flag = input(' ');
+    end
+    if river_flag==1
+        dep=find(D>(prctile(D(find(D>0)),25)));
+        %%dep=find(D>0);
+        dep_m=zeros(250,300);
+        dep_m(dep)=1;
+        map=zeros(g.ly/g.dy,g.lx/g.dx,2);
+        map(:,:,1)=dep_m;
+        map=smooth3(map,'box',[21 21 1]);
+        E=map(:,:,1);
+        figure;imagesc(map(:,:,1));title('Simulation Area');
+        break;
+    elseif river_flag==2 
+        pick_up=1;
+        [RI RJ]=ind2sub([M N],find(D>0));
+        Rind=find(RI==min(RI),1,'first');
+        ri=RI(Rind)+5;
+        rj=RJ(Rind);
+        river_flag=0; 
+        close all;     
+    end
+
+end
+
+sim_area=map(:,:,1);
+contour_map=cont(sim_area);
+figure;imagesc(contour_map);
+%% Generating one lobe
+start_point=[rj ri];
+angles=get_angle([ri rj],contour_map,75);%angles from simulated area
+verbose=0;
+lobe_max_thick=interp1(max_lobe_thick_cdf(:,2), max_lobe_thick_cdf(:,1),rand);
+[lobe_thick_map,lobe_ind_map]=lobe_generator(start_point,center_point,angles,width_cdf,lobe_length_cdf,...
+                              lobe_max_thick,g,verbose);  
+
+while isnan(lobe_max_thick)
+    lobe_max_thick=interp1(max_lobe_thick_cdf(:,2), max_lobe_thick_cdf(:,1),rand);
+end
+chan_h=lobe_max_thick;
+
+nObSimTI = 6;
+nTI = 4;
+nObSimPF = 3;
+snesim_lobe_num = 1;
+numCat = 3; 
+lobe_prob_map_data = zeros(M,N);
+condition_flag = 0;
+write_flag = 0;
+plot_flag = 0;
+Figures_output_path='/Users/alejandroleiva/Documents/ERE/process based process/tries/';
+ML_output_path ='/Users/alejandroleiva/Documents/ERE/process based process/tries/';
+ML_code_path='/Users/alejandroleiva/Documents/ERE/process based process/tries/';%check if it's necessary
+g2s_code_path = '/Users/alejandroleiva/Documents/ERE/process based process/tries/upslope_toolbox';
+
+[cat_probs,boundaries, lobe_indicator_map, TIangle]=TI_Sim2(nObSimTI, nTI,nObSimPF,start_point,angles,snesim_lobe_num,numCat,center_point,chan_detrend_totalL_to_width_cdf,chan_h,base_topo, prob_map_mg, prob_map_pg,lobe_prob_map_data,width_cdf,lobe_length_cdf,lobe_max_thick, g, ML_output_path,g2s_code_path, ML_code_path, verbose,condition_flag, write_flag, plot_flag)

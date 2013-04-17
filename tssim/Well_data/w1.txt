@@ -1,0 +1,7 @@
+%location (x y z) z:core bottom altitude 
+%length interval - facies type (lobe:1 -  Shale:0) - type of contact (depositional:1 erosional:0)
+230 50 0
+0.7 1 1
+
+
+
